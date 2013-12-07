@@ -36,9 +36,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "char_vector.h"
-#include "string_utils.h"
-
 /*
 #ifdef __WIN__
   #define DLLEXP __declspec(dllexport)
@@ -91,7 +88,9 @@
   /* Function definitions */
   my_bool str_transliterate_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
   {
-    st_char_vector *vec;
+
+    unsigned char *original;
+    unsigned char *transliterated;
 
     /* Check if user provided 1 argument and is of type string */
     if (args->arg_count != 1)
@@ -106,15 +105,17 @@
       return 1;
     }
 
-    vec = char_vector_alloc();
+    original = args->args[0];
 
-    if (vec == NULL)
+    transliterated = (unsigned char *)(malloc(sizeof(unsigned char) * strlen(original)));
+
+    if (transliterated == NULL)
     {
-      x_strlcpy(message, "char_vector_alloc() failed", MYSQL_ERRMSG_SIZE);
+      snprintf(message, MYSQL_ERRMSG_SIZE, "failed to allocate memory for transliteration");
       return 1;
     }
 
-    initid->ptr = (char *) vec;
+    initid->ptr = (unsigned char *) transliterated;
 
     initid->maybe_null = 1;
 
@@ -123,102 +124,54 @@
 
   void str_transliterate_deinit(UDF_INIT *initid)
   {
-    st_char_vector *vec = (st_char_vector *) initid->ptr;
-    char_vector_free(vec);
+    unsigned char *transliterated = (unsigned char *) initid->ptr;
+    free(transliterated);
   }
-
-  #define STR_LENGTH(str) ((sizeof (str)) -1)
-  #define STR_COMMA_LENGTH(str_lit) str_lit, STR_LENGTH(str_lit)
-
 
   char *str_transliterate(UDF_INIT *initid, UDF_ARGS *args,
         char *result, unsigned long *res_length,
         char *null_value, char *error)
   {
 
-    st_char_vector *vec;
+    unsigned char *original = args->args[0];
+    unsigned char *transliterated = initid->ptr;
 
-    char *original;
+    int original_counter = 0, transliterated_counter = 0;
 
-    /* int part_stack[14];
-    int *part_ptr; */
-
-    if (args->args[0] == NULL) {
+    if(original == NULL)
+    {
       result = NULL;
       *res_length = 0;
       *null_value = 1;
       return result;
     }
 
-    vec = (st_char_vector *) initid->ptr;
+    for(; original[original_counter] != '\0'; original_counter++){
+      if(original[original_counter] > 0x7F)
+      {
+        if(original[original_counter] == 0xC3 && original[original_counter+1] == 0xA1)
+        {
+          transliterated[transliterated_counter] = 'a';
+          transliterated_counter += 1;
+          original_counter += 1;
+        }
+        else
+        {
+          transliterated[transliterated_counter] = original[original_counter];
+          transliterated_counter += 1;
+        }
+      }
+      else
+      {
+        transliterated[transliterated_counter] = original[original_counter];
+        transliterated_counter += 1;
+      }
+    }
 
-    original = *((char **) args->args[0]);
+    transliterated[transliterated_counter] = '\0';
 
-    // part_ptr = part_stack;
-
-    // assert(char_vector_length(vec) == 0);
-
-    // // check for negative values or zero
-    // if (value < 0)
-    // {
-    //   char_vector_append(vec, STR_COMMA_LENGTH("negative "));
-    //   value = -value;
-    // }
-    // else if (value == 0)
-    // {
-    //   char *tmp = "zero";
-    //   *res_length = STR_LENGTH("zero");
-    //   return tmp;
-    // }
-
-    // // splitting the number into its parts
-    // for (; value; value /= 1000)
-    //   *part_ptr++ = value % 1000;
-
-    // while (part_ptr > part_stack)
-    // {
-    //   int p = *--part_ptr;
-    //   const int pWasNonzero = p != 0;
-
-    //   if (p >= 100)
-    //   {
-    //     char_vector_strcat(vec, ones[p / 100 - 1]);
-    //     char_vector_append(vec, STR_COMMA_LENGTH(" hundred "));
-    //     p %= 100;
-    //   }
-
-    //   if (p >= 20)
-    //   {
-    //     if (p % 10)
-    //     {
-    //       char_vector_strcat(vec, tens[p / 10 - 2]);
-    //       char_vector_append(vec, STR_COMMA_LENGTH("-"));
-    //       char_vector_strcat(vec, ones[p % 10 - 1]);
-    //       char_vector_append(vec, STR_COMMA_LENGTH(" "));
-    //     }
-    //     else
-    //     {
-    //       char_vector_strcat(vec, tens[p / 10 - 2]);
-    //       char_vector_append(vec, STR_COMMA_LENGTH(" "));
-    //     }
-    //   }
-    //   else if (p > 0)
-    //   {
-    //     char_vector_strcat(vec, ones[p - 1]);
-    //     char_vector_append(vec, STR_COMMA_LENGTH(" "));
-    //   }
-
-    //   if (pWasNonzero && part_ptr > part_stack)
-    //   {
-    //     char_vector_strcat(vec, powers[part_ptr - part_stack - 1]);
-    //     char_vector_append(vec, STR_COMMA_LENGTH(" "));
-    //   }
-    // }
-
-    // *res_length = char_vector_length(vec) - 1;
-    *res_length = 2;
-    // return char_vector_get_ptr(vec);
-    return original;
+    *res_length = transliterated_counter;
+    return transliterated;
   }
 
 #endif /* HAVE_DLOPEN */

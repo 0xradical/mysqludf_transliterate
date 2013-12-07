@@ -6,7 +6,7 @@ A MySQL UDF for transliteration of strings
 Instalation instructions
 ------------------------
 
-      $ gcc $(mysql_config --cflags) -shared -fPIC -o transliterate.so transliterate.c char_vector.c string_utils.c
+      $ gcc $(mysql_config --cflags) -shared -fPIC -o transliterate.so transliterate.c
 
 
   This will create a .so file. Now copy this file into plugins:

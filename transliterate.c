@@ -36,14 +36,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-/*
-#ifdef __WIN__
-  #define DLLEXP __declspec(dllexport)
-#else
-  #define DLLEXP
-#endif
-*/
-
 #ifdef __GNUC__
   /* From Check:  http://check.svn.sourceforge.net/viewvc/check/trunk/src/check.h.in?revision=HEAD
      License: LGPL 2.1 or later */
@@ -62,10 +54,6 @@
   #endif
 #else
   #define ATTRIBUTE_UNUSED
-#endif
-
-#ifndef SIZE_MAX
-  #define SIZE_MAX ((size_t) -1)
 #endif
 
 #ifdef HAVE_DLOPEN /* dynamic loading */
@@ -189,7 +177,7 @@
           original_counter += 2; /* á = a + 0xCC + acute accent */
         }
         /* It's probably ISO-8859-1 */
-        else if (original[original_counter] > 0xC0)
+        else if (original[original_counter] >= 0xC0)
         {
 
           if(original[original_counter] >= 0xE0 && original[original_counter] <= 0xE6)
@@ -261,7 +249,6 @@
       }
     }
 
-    // return transliterated;
     memcpy(result, transliterated, transliterated_counter);
     *length = transliterated_counter;
     free(transliterated);

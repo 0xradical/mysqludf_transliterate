@@ -73,24 +73,13 @@
   #define LIBVERSION ("mysqludf_transliterate version 0.1")
 
   /* Function declarations */
-  #ifdef  __cplusplus
-    extern "C" {
-  #endif
-
-  my_bool str_transliterate_init(UDF_INIT *, UDF_ARGS *, char *);
-  void str_transliterate_deinit(UDF_INIT *);
-  char *str_transliterate(UDF_INIT *, UDF_ARGS *, char *, unsigned long *, char *, char *);
-
-  #ifdef  __cplusplus
-    }
-  #endif
+  my_bool transliterate_init(UDF_INIT *, UDF_ARGS *, char *);
+  void transliterate_deinit(UDF_INIT *);
+  char *transliterate(UDF_INIT *, UDF_ARGS *, char *, unsigned long *, char *, char *);
 
   /* Function definitions */
-  my_bool str_transliterate_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
+  my_bool transliterate_init(UDF_INIT *initid, UDF_ARGS *args, char *message)
   {
-
-    unsigned char *original;
-    unsigned char *transliterated;
 
     /* Check if user provided 1 argument and is of type string */
     if (args->arg_count != 1)
@@ -105,91 +94,34 @@
       return 1;
     }
 
-    original = args->args[0];
-
-    transliterated = (unsigned char *)(malloc(sizeof(unsigned char) * strlen(original)));
-
-    if (transliterated == NULL)
-    {
-      snprintf(message, MYSQL_ERRMSG_SIZE, "failed to allocate memory for transliteration");
-      return 1;
-    }
-
-    initid->ptr = (unsigned char *) transliterated;
-
-    initid->maybe_null = 1;
-
     return 0;
   }
 
-  void str_transliterate_deinit(UDF_INIT *initid)
+  void transliterate_deinit(UDF_INIT *initid)
   {
-    unsigned char *transliterated = (unsigned char *) initid->ptr;
-    free(transliterated);
   }
 
-  char *str_transliterate(UDF_INIT *initid, UDF_ARGS *args,
-        char *result, unsigned long *res_length,
+  char *transliterate(UDF_INIT *initid, UDF_ARGS *args,
+        char *result, unsigned long *length,
         char *null_value, char *error)
   {
 
     unsigned char *original = args->args[0];
-    unsigned char *transliterated = initid->ptr;
-
+    unsigned char *transliterated = (unsigned char *)(malloc(sizeof(unsigned char) * args->lengths[0]));
     int original_counter = 0, transliterated_counter = 0;
 
     if(original == NULL)
     {
       result = NULL;
-      *res_length = 0;
+      *length = 0;
       *null_value = 1;
       return result;
     }
 
-    /*
-
-    Mapping for pt-BR:
-
-    á, ã, à, â: a
-    é, ê: e
-    í: i
-    õ, ó, ô: o
-    ú, ü: u
-    ç: c
-
-    ruby:
-
-    require 'unicode'
-
-    mapping = {
-      'a' => ['á','ã','à','â'],
-      'A' => ['Á','Ã','À','Â'],
-      'e' => ['é','ê'],
-      'E' => ['É','Ê'],
-      'i' => ['í'],
-      'I' => ['Í'],
-      'o' => ['ó','õ','ô'],
-      'O' => ['Ó','Õ','Ô'],
-      'u' => ['ú','ü'],
-      'U' => ['Ú','Ü'],
-      'c' => ['ç'],
-      'C' => ['Ç']
-    }
-
-    # NFC
-    mapping.map do |trans_char, chars|
-      [trans_char, chars.map do |char|
-        Unicode.nfc(char).bytes.map { |b| sprintf("0x%02X",b) }
-      end]
-    end
-
-
-    */
-
-    for(; original[original_counter] != '\0'; original_counter++){
+    for(; original_counter < args->lengths[0]; original_counter++){
       if(original[original_counter] > 0x7F)
       {
-        /* NFC */
+        /* UTF-8 NFC */
         if(original[original_counter] == 0xC3)
         {
 
@@ -225,11 +157,96 @@
           {
             transliterated[transliterated_counter] = 'O';
           }
-
-
+          else if(original[original_counter+1] >= 0xBA && original[original_counter+1] <= 0xBC)
+          {
+            transliterated[transliterated_counter] = 'u';
+          }
+          else if(original[original_counter+1] >= 0x9A && original[original_counter+1] <= 0x9C)
+          {
+            transliterated[transliterated_counter] = 'U';
+          }
+          else if(original[original_counter+1] == 0xA7)
+          {
+            transliterated[transliterated_counter] = 'c';
+          }
+          else if(original[original_counter+1] == 0x87)
+          {
+            transliterated[transliterated_counter] = 'c';
+          }
+          else
+          {
+            transliterated[transliterated_counter] = '?';
+          }
 
           transliterated_counter += 1;
           original_counter += 1;
+        }
+        /* UTF-8 NFD: easier, just test if original[original_counter+1] == 0xCC */
+        else if (original[original_counter+1] == 0xCC)
+        {
+          transliterated[transliterated_counter] = original[original_counter];
+          transliterated_counter += 1;
+          original_counter += 2; /* á = a + 0xCC + acute accent */
+        }
+        /* It's probably ISO-8859-1 */
+        else if (original[original_counter] > 0xC0)
+        {
+
+          if(original[original_counter] >= 0xE0 && original[original_counter] <= 0xE6)
+          {
+            transliterated[transliterated_counter] = 'a';
+          }
+          else if(original[original_counter] >= 0xC0 && original[original_counter] <= 0xC6)
+          {
+            transliterated[transliterated_counter] = 'A';
+          }
+          else if(original[original_counter] >= 0xE8 && original[original_counter] <= 0xEB)
+          {
+            transliterated[transliterated_counter] = 'e';
+          }
+          else if(original[original_counter] >= 0xC8 && original[original_counter] <= 0xCB)
+          {
+            transliterated[transliterated_counter] = 'E';
+          }
+          else if(original[original_counter] == 0xED)
+          {
+            transliterated[transliterated_counter] = 'i';
+          }
+          else if(original[original_counter] == 0xCD)
+          {
+            transliterated[transliterated_counter] = 'I';
+          }
+          else if(original[original_counter] >= 0xF2 && original[original_counter] <= 0xF6)
+          {
+            transliterated[transliterated_counter] = 'o';
+          }
+          else if(original[original_counter] >= 0xD2 && original[original_counter] <= 0xD6)
+          {
+            transliterated[transliterated_counter] = 'O';
+          }
+          else if(original[original_counter] >= 0xF9 && original[original_counter] <= 0xFC)
+          {
+            transliterated[transliterated_counter] = 'u';
+          }
+          else if(original[original_counter] >= 0xD9 && original[original_counter] <= 0xDC)
+          {
+            transliterated[transliterated_counter] = 'U';
+          }
+          else if(original[original_counter] == 0xE7)
+          {
+            transliterated[transliterated_counter] = 'c';
+          }
+          else if(original[original_counter] == 0xC7)
+          {
+            transliterated[transliterated_counter] = 'c';
+          }
+          else
+          {
+            transliterated[transliterated_counter] = '?';
+          }
+
+          transliterated_counter += 1;
+
         }
         else
         {
@@ -244,10 +261,12 @@
       }
     }
 
-    transliterated[transliterated_counter] = '\0';
+    // return transliterated;
+    memcpy(result, transliterated, transliterated_counter);
+    *length = transliterated_counter;
+    free(transliterated);
 
-    *res_length = transliterated_counter;
-    return transliterated;
+    return result;
   }
 
 #endif /* HAVE_DLOPEN */

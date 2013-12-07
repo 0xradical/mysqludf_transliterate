@@ -146,12 +146,88 @@
       return result;
     }
 
+    /*
+
+    Mapping for pt-BR:
+
+    á, ã, à, â: a
+    é, ê: e
+    í: i
+    õ, ó, ô: o
+    ú, ü: u
+    ç: c
+
+    ruby:
+
+    require 'unicode'
+
+    mapping = {
+      'a' => ['á','ã','à','â'],
+      'A' => ['Á','Ã','À','Â'],
+      'e' => ['é','ê'],
+      'E' => ['É','Ê'],
+      'i' => ['í'],
+      'I' => ['Í'],
+      'o' => ['ó','õ','ô'],
+      'O' => ['Ó','Õ','Ô'],
+      'u' => ['ú','ü'],
+      'U' => ['Ú','Ü'],
+      'c' => ['ç'],
+      'C' => ['Ç']
+    }
+
+    # NFC
+    mapping.map do |trans_char, chars|
+      [trans_char, chars.map do |char|
+        Unicode.nfc(char).bytes.map { |b| sprintf("0x%02X",b) }
+      end]
+    end
+
+
+    */
+
     for(; original[original_counter] != '\0'; original_counter++){
       if(original[original_counter] > 0x7F)
       {
-        if(original[original_counter] == 0xC3 && original[original_counter+1] == 0xA1)
+        /* NFC */
+        if(original[original_counter] == 0xC3)
         {
-          transliterated[transliterated_counter] = 'a';
+
+          if(original[original_counter+1] >= 0xA0 && original[original_counter+1] <= 0xA3)
+          {
+            transliterated[transliterated_counter] = 'a';
+          }
+          else if(original[original_counter+1] >= 0x80 && original[original_counter+1] <= 0x83)
+          {
+            transliterated[transliterated_counter] = 'A';
+          }
+          else if(original[original_counter+1] >= 0xA9 && original[original_counter+1] <= 0xAA)
+          {
+            transliterated[transliterated_counter] = 'e';
+          }
+          else if(original[original_counter+1] >= 0x89 && original[original_counter+1] <= 0x8A)
+          {
+            transliterated[transliterated_counter] = 'E';
+          }
+          else if(original[original_counter+1] == 0xAD)
+          {
+            transliterated[transliterated_counter] = 'i';
+          }
+          else if(original[original_counter+1] == 0x8D)
+          {
+            transliterated[transliterated_counter] = 'I';
+          }
+          else if(original[original_counter+1] >= 0xB3 && original[original_counter+1] <= 0xB5)
+          {
+            transliterated[transliterated_counter] = 'o';
+          }
+          else if(original[original_counter+1] >= 0x93 && original[original_counter+1] <= 0x95)
+          {
+            transliterated[transliterated_counter] = 'O';
+          }
+
+
+
           transliterated_counter += 1;
           original_counter += 1;
         }
